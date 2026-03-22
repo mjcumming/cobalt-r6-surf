@@ -1,0 +1,27 @@
+[Unit]
+Description=Cobalt Boat Automation API
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=__COBALT_USER__
+Group=__COBALT_GROUP__
+WorkingDirectory=__COBALT_REPO_ROOT__
+EnvironmentFile=/etc/default/cobalt-boat
+ExecStartPre=/usr/local/bin/cobalt-canboat-decoder --self-check
+ExecStart=__COBALT_REPO_ROOT__/.venv/bin/cobalt-boat-api
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__COBALT_REPO_ROOT__/data /var/log/cobalt-boat
+StandardOutput=append:/var/log/cobalt-boat/cobalt-boat.log
+StandardError=append:/var/log/cobalt-boat/cobalt-boat.log
+
+[Install]
+WantedBy=multi-user.target

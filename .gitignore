@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+*.log
+
+# Runtime data
+/data/*.db
+/data/*.db-*
+/data/captures/*.jsonl

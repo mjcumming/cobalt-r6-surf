@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+URL="http://127.0.0.1:8080/health"
+STATUS_URL="http://127.0.0.1:8080/status"
+RESTART_SERVICE=""
+
+usage() {
+  cat <<USAGE
+Usage: cobalt-boat-healthcheck [--url URL] [--status-url URL] [--restart-service NAME]
+
+Checks API health/status safety invariants.
+Exits non-zero on failure.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --url)
+      URL="$2"
+      shift 2
+      ;;
+    --status-url)
+      STATUS_URL="$2"
+      shift 2
+      ;;
+    --restart-service)
+      RESTART_SERVICE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ! python3 - "$URL" "$STATUS_URL" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+health_url = sys.argv[1]
+status_url = sys.argv[2]
+
+
+def fetch(url: str) -> dict[str, object]:
+    req = urllib.request.Request(url=url, method="GET")
+    with urllib.request.urlopen(req, timeout=2) as response:
+        if response.status != 200:
+            raise RuntimeError(f"http_status={response.status} url={url}")
+        data = response.read().decode("utf-8")
+    payload = json.loads(data)
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"invalid_json_object url={url}")
+    return payload
+
+
+health = fetch(health_url)
+status = fetch(status_url)
+
+if health.get("ok") is not True:
+    raise RuntimeError("health_not_ok")
+if health.get("decoder_ready") is not True:
+    raise RuntimeError("decoder_not_ready")
+if health.get("database_ready") is not True:
+    raise RuntimeError("database_not_ready")
+if health.get("can_listener_running") is not True:
+    raise RuntimeError("can_listener_not_running")
+
+if status.get("read_only_mode") is not True:
+    raise RuntimeError("read_only_mode_disabled")
+if status.get("write_enable") is not False:
+    raise RuntimeError("write_enable_should_be_false")
+if status.get("emergency_disable") is not False:
+    raise RuntimeError("emergency_disable_should_be_false")
+
+print("healthcheck_ok")
+PY
+then
+  echo "[healthcheck] failed url=${URL} status_url=${STATUS_URL}" >&2
+  if [[ -n "${RESTART_SERVICE}" ]]; then
+    echo "[healthcheck] restarting service ${RESTART_SERVICE}" >&2
+    systemctl restart "${RESTART_SERVICE}" || true
+  fi
+  exit 1
+fi
+
+echo "[healthcheck] passed"

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cobalt Boat API healthcheck periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Unit=cobalt-boat-healthcheck.service
+
+[Install]
+WantedBy=timers.target

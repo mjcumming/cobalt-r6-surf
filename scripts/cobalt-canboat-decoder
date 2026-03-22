@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Canonical decoder entrypoint for the Cobalt platform.
+# This wrapper enforces a fixed analyzer invocation for auditing/reproducibility.
+
+ANALYZER_BIN="${ANALYZER_BIN:-/usr/local/bin/analyzer}"
+CANDUMP2ANALYZER_BIN="${CANDUMP2ANALYZER_BIN:-/usr/local/bin/candump2analyzer}"
+EXPECTED_VERSION="${COBALT_CANBOAT_EXPECTED_VERSION:-}"
+
+check_binary() {
+  if [[ ! -x "${ANALYZER_BIN}" ]]; then
+    echo "decoder wrapper error: analyzer binary not executable at ${ANALYZER_BIN}" >&2
+    exit 1
+  fi
+  if [[ ! -x "${CANDUMP2ANALYZER_BIN}" ]]; then
+    echo "decoder wrapper error: candump2analyzer binary not executable at ${CANDUMP2ANALYZER_BIN}" >&2
+    exit 1
+  fi
+}
+
+read_version() {
+  local out
+  out=""
+  if out="$(${ANALYZER_BIN} --version 2>/dev/null)"; then
+    printf '%s' "${out}"
+    return 0
+  fi
+  if out="$(${ANALYZER_BIN} -version 2>/dev/null)"; then
+    printf '%s' "${out}"
+    return 0
+  fi
+  printf 'unknown'
+}
+
+self_check() {
+  check_binary
+  local version
+  version="$(read_version)"
+  if [[ -n "${EXPECTED_VERSION}" ]] && [[ "${version}" != *"${EXPECTED_VERSION}"* ]]; then
+    echo "decoder wrapper error: expected version contains '${EXPECTED_VERSION}', got '${version}'" >&2
+    exit 1
+  fi
+  echo "decoder wrapper ok: bin=${ANALYZER_BIN} version=${version}"
+}
+
+main() {
+  if [[ "${1:-}" == "--self-check" ]]; then
+    self_check
+    exit 0
+  fi
+
+  check_binary
+  # Input: candump format lines. Output: analyzer JSON.
+  exec "${CANDUMP2ANALYZER_BIN}" | "${ANALYZER_BIN}" -json
+}
+
+main "$@"

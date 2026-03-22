@@ -1,0 +1,13 @@
+[Unit]
+Description=Cobalt Boat API Healthcheck
+After=cobalt-boat.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/bin/cobalt-boat-healthcheck --restart-service cobalt-boat.service
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
