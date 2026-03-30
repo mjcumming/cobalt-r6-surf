@@ -16,8 +16,13 @@ class Settings:
 
     app_name: str = "cobalt-boat"
     environment: str = "production"
-    api_host: str = "127.0.0.1"
-    api_port: int = 8080
+    # Standard HTTP port (80). Use COBALT_API_PORT=443 with TLS paths below for HTTPS.
+    # Override with COBALT_API_HOST=127.0.0.1 for localhost-only.
+    api_host: str = "0.0.0.0"
+    api_port: int = 80
+    # When both paths exist, uvicorn serves HTTPS (set COBALT_API_PORT=443 for the usual case).
+    api_ssl_certfile: Path | None = None
+    api_ssl_keyfile: Path | None = None
 
     can_interface: str = "can0"
     can_channel_bitrate: int = 250_000
@@ -61,6 +66,8 @@ class Settings:
             environment=os.getenv("COBALT_ENV", cls.environment),
             api_host=os.getenv("COBALT_API_HOST", cls.api_host),
             api_port=int(os.getenv("COBALT_API_PORT", str(cls.api_port))),
+            api_ssl_certfile=_optional_cert_path("COBALT_API_SSL_CERTFILE"),
+            api_ssl_keyfile=_optional_cert_path("COBALT_API_SSL_KEYFILE"),
             can_interface=os.getenv("COBALT_CAN_INTERFACE", cls.can_interface),
             can_channel_bitrate=int(
                 os.getenv("COBALT_CAN_BITRATE", str(cls.can_channel_bitrate))
@@ -143,6 +150,16 @@ class Settings:
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _optional_cert_path(env_key: str) -> Path | None:
+    raw = os.getenv(env_key)
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped:
+        return None
+    return Path(stripped)
 
 
 def _parse_bool(raw: str | None, default: bool) -> bool:

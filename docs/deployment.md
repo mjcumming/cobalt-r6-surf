@@ -47,8 +47,8 @@ systemctl status cobalt-boat-healthcheck.timer --no-pager
 journalctl -u cobalt-boat-healthcheck.service -n 50 --no-pager
 sudo logrotate -d /etc/logrotate.d/cobalt-boat
 journalctl -u cobalt-boat.service -n 100 --no-pager
-curl -s http://127.0.0.1:8080/health
-curl -s http://127.0.0.1:8080/status
+curl -s http://127.0.0.1/health
+curl -s http://127.0.0.1/status
 ```
 
 Expected:
@@ -57,6 +57,10 @@ Expected:
 - `cobalt-boat-healthcheck.timer` is `active (waiting)`
 - `/health` shows `decoder_ready=true`
 - `/status` shows `read_only_mode=true` and `write_enable=false`
+
+### Web UI and HTTP ports
+
+The default install listens on **port 80** (`COBALT_API_PORT=80`) and **`0.0.0.0`**, so opening **`http://<Pi-address>/`** in a browser shows the dashboard. Optional HTTPS uses **`COBALT_API_SSL_CERTFILE`**, **`COBALT_API_SSL_KEYFILE`**, and typically port **443**. See [`docs/web-ui-and-http.md`](web-ui-and-http.md) and ADR [0004](adr/0004-web-ui-standard-http-telemetry.md). If you upgraded from an older env that used **`127.0.0.1:8080`**, re-run **`install_systemd_service.sh`** and restart the service so **`CAP_NET_BIND_SERVICE`** and the new env apply.
 
 ## 5. Update workflow
 
@@ -111,4 +115,4 @@ If healthcheck repeatedly fails:
 
 1. `journalctl -u cobalt-boat-healthcheck.service -n 200 --no-pager`
 2. Test manually: `/usr/local/bin/cobalt-boat-healthcheck`
-3. Verify API locally: `curl -s http://127.0.0.1:8080/health`
+3. Verify API locally: `curl -s http://127.0.0.1/health`

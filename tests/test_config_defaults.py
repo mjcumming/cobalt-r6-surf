@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from cobalt_boat.config import Settings
 
 
@@ -7,6 +9,9 @@ def test_default_decoder_command_uses_wrapper() -> None:
     settings = Settings()
     assert settings.canboat_command == "/usr/local/bin/cobalt-canboat-decoder"
     assert settings.decoder_required is True
+    assert settings.api_port == 80
+    assert settings.api_ssl_certfile is None
+    assert settings.api_ssl_keyfile is None
 
 
 def test_default_log_rotation_bounds() -> None:
@@ -33,3 +38,16 @@ def test_log_level_from_env(monkeypatch) -> None:
         monkeypatch.delenv(key, raising=False)
     settings = Settings.from_env()
     assert settings.log_level == "WARNING"
+
+
+def test_tls_paths_from_env(monkeypatch, tmp_path: Path) -> None:
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    cert.write_text("x", encoding="utf-8")
+    key.write_text("y", encoding="utf-8")
+    monkeypatch.setenv("COBALT_API_SSL_CERTFILE", str(cert))
+    monkeypatch.setenv("COBALT_API_SSL_KEYFILE", str(key))
+    monkeypatch.delenv("COBALT_LOG_LEVEL", raising=False)
+    settings = Settings.from_env()
+    assert settings.api_ssl_certfile == cert
+    assert settings.api_ssl_keyfile == key

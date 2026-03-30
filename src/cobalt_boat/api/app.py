@@ -7,8 +7,6 @@ from datetime import datetime
 
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
-from fastapi.responses import RedirectResponse
-
 from cobalt_boat.can.capture import CaptureManager
 from cobalt_boat.can.decoder import (
     BasicNmeaDecoder,
@@ -16,11 +14,12 @@ from cobalt_boat.can.decoder import (
     CanboatProcessDecoder,
 )
 from cobalt_boat.can.interface import SocketCanInterfaceManager
-from cobalt_boat.can.models import CanEvent
+from cobalt_boat.can.models import CanEvent, DecodedCanMessage
 from cobalt_boat.can.socketcan import SocketCanListener
 from cobalt_boat.can.transmit import SocketCanTransmitter
 from cobalt_boat.config import Settings
-from cobalt_boat.events import EventBus
+from cobalt_boat.domains.telemetry import BoatTelemetryStore
+from cobalt_boat.events import EventBus, EventEnvelope
 from cobalt_boat.logging_config import configure_logging
 from cobalt_boat.safety.policy import PolicyEngine
 from cobalt_boat.services.platform import PlatformRuntime, PlatformService
@@ -46,6 +45,7 @@ from .schemas import (
     HealthResponse,
     LabFusionTransmitResponse,
     StatusResponse,
+    TelemetrySnapshotResponse,
     WatchlistEntryResponse,
     WatchlistUpsertRequest,
 )
@@ -73,6 +73,7 @@ def create_runtime(settings: Settings) -> PlatformService:
     db = Database(sqlite_path=settings.sqlite_path)
     capture_manager = CaptureManager(settings.capture_dir)
     audit_log_repository = AuditLogRepository(db)
+    telemetry = BoatTelemetryStore()
 
     service_placeholder: dict[str, PlatformService] = {}
 
@@ -109,7 +110,14 @@ def create_runtime(settings: Settings) -> PlatformService:
         decoder=create_decoder(settings),
         can_listener=can_listener,
         can_transmitter=can_transmitter,
+        telemetry=telemetry,
     )
+
+    def _on_message_decoded(envelope: EventEnvelope) -> None:
+        if isinstance(envelope.payload, DecodedCanMessage):
+            telemetry.record(envelope.occurred_at, envelope.payload)
+
+    runtime.event_bus.subscribe("can.message_decoded", _on_message_decoded)
     service = PlatformService(runtime)
     service_placeholder["service"] = service
     return service
@@ -159,6 +167,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             capture_active=state.capture_active,
             capture_session_id=state.capture_session_id,
         )
+
+    @app.get("/api/telemetry", response_model=TelemetrySnapshotResponse)
+    def api_telemetry() -> TelemetrySnapshotResponse:
+        return TelemetrySnapshotResponse.model_validate(platform_service.telemetry_snapshot())
 
     @app.get("/debug/catalog")
     def debug_catalog(
@@ -279,9 +291,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def debug_page() -> str:
         return DEBUG_PAGE_HTML
 
-    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
-    def root_redirect() -> RedirectResponse:
-        return RedirectResponse(url="/debug", status_code=307)
+    @app.api_route("/debug/lab", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def debug_lab_page() -> str:
+        return LAB_PAGE_HTML
+
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False, response_class=HTMLResponse)
+    def dashboard_page() -> str:
+        return DASHBOARD_PAGE_HTML
 
     @app.post("/commands/preview", response_model=CommandPreviewResponse)
     def command_preview(request: CommandPreviewRequest) -> CommandPreviewResponse:
@@ -317,8 +333,223 @@ def run() -> None:
 
     settings = Settings.from_env()
     app = create_app(settings)
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port)
+    ssl_keyfile: str | None = None
+    ssl_certfile: str | None = None
+    if settings.api_ssl_keyfile and settings.api_ssl_certfile:
+        key = settings.api_ssl_keyfile
+        cert = settings.api_ssl_certfile
+        if key.is_file() and cert.is_file():
+            ssl_keyfile = str(key)
+            ssl_certfile = str(cert)
+    uvicorn.run(
+        app,
+        host=settings.api_host,
+        port=settings.api_port,
+        ssl_keyfile=ssl_keyfile,
+        ssl_certfile=ssl_certfile,
+    )
 
+
+DASHBOARD_PAGE_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cobalt Boat</title>
+    <style>
+      :root { font-family: "JetBrains Mono", "Fira Code", monospace; color-scheme: light; }
+      body { margin: 0; background: #0b1d2a; color: #d9edf7; }
+      header { padding: 12px 16px; background: #12324a; border-bottom: 1px solid #2b5d7e;
+              display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+      h1 { margin: 0; font-size: 18px; letter-spacing: 0.4px; }
+      nav.site-nav a { color: #7ec8e3; text-decoration: none; font-size: 13px; margin-left: 12px; }
+      nav.site-nav a:hover { text-decoration: underline; }
+      nav.site-nav span.here { color: #9fb8c8; font-size: 13px; margin-left: 12px; }
+      main { padding: 16px; max-width: 960px; margin: 0 auto; }
+      .hint { font-size: 12px; color: #9fb8c8; margin-bottom: 16px; line-height: 1.5; }
+      .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+      .card { background: #0f283a; border: 1px solid #2b5d7e; border-radius: 6px; padding: 14px; }
+      .card h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #9fb8c8; }
+      .card .val { font-size: 22px; font-weight: 600; color: #e8f4fc; }
+      .card .sub { font-size: 11px; color: #7a9aad; margin-top: 6px; }
+      .actions { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
+      .actions a { display: inline-block; padding: 10px 16px; background: #173b55; border: 1px solid #2b5d7e;
+                   border-radius: 6px; color: #d9edf7; text-decoration: none; font-size: 13px; }
+      .actions a:hover { background: #1f4d70; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Cobalt Boat</h1>
+      <nav class="site-nav">
+        <span class="here">Dashboard</span>
+        <a href="/debug">Debug console</a>
+        <a href="/debug/lab">Lab / test transmit</a>
+      </nav>
+    </header>
+    <main>
+      <p class="hint">Live values appear when CANboat decodes them from the NMEA 2000 bus. Use normal web URLs: <strong>http://</strong> and this device&rsquo;s IP on port 80, or <strong>https://</strong> on port 443 when TLS is configured—no custom port or path required for the default install.</p>
+      <div class="stats">
+        <div class="card"><h2>Engine RPM</h2><div class="val" id="rpm">—</div><div class="sub" id="rpm-sub"></div></div>
+        <div class="card"><h2>Coolant</h2><div class="val" id="cool">—</div><div class="sub" id="cool-sub"></div></div>
+        <div class="card"><h2>Speed (water)</h2><div class="val" id="stw">—</div><div class="sub" id="stw-sub"></div></div>
+        <div class="card"><h2>Speed (SOG)</h2><div class="val" id="sog">—</div><div class="sub" id="sog-sub"></div></div>
+        <div class="card" style="grid-column: 1 / -1;"><h2>GPS</h2><div class="val" id="gps">—</div><div class="sub" id="gps-sub"></div></div>
+      </div>
+      <div class="actions">
+        <a href="/debug">Open debug console</a>
+        <a href="/debug/lab">Open lab transmit (Fusion stubs)</a>
+      </div>
+    </main>
+    <script>
+      const KN = 1.943844492642;
+      function fmtTime(iso) {
+        if (!iso) return "";
+        try {
+          const d = new Date(iso);
+          return "Updated " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        } catch (_) { return ""; }
+      }
+      function fmtLatLon(lat, lon) {
+        if (lat == null || lon == null) return null;
+        const ns = lat >= 0 ? "N" : "S";
+        const ew = lon >= 0 ? "E" : "W";
+        return Math.abs(lat).toFixed(5) + "° " + ns + ", " + Math.abs(lon).toFixed(5) + "° " + ew;
+      }
+      async function refresh() {
+        try {
+          const t = await (await fetch("/api/telemetry", { cache: "no-store" })).json();
+          const rpm = t.engine_rpm;
+          document.getElementById("rpm").textContent = rpm.value != null ? Math.round(rpm.value).toString() + " RPM" : "—";
+          document.getElementById("rpm-sub").textContent = fmtTime(rpm.updated_at);
+          const cool = t.engine_coolant_c;
+          document.getElementById("cool").textContent = cool.value != null ? cool.value.toFixed(1) + " °C" : "—";
+          document.getElementById("cool-sub").textContent = fmtTime(cool.updated_at);
+          const stw = t.speed_water_mps;
+          if (stw.value != null) {
+            const kn = stw.value * KN;
+            document.getElementById("stw").textContent = kn.toFixed(2) + " kn";
+            document.getElementById("stw-sub").textContent = stw.value.toFixed(3) + " m/s · " + fmtTime(stw.updated_at);
+          } else {
+            document.getElementById("stw").textContent = "—";
+            document.getElementById("stw-sub").textContent = "";
+          }
+          const sogM = t.speed_over_ground_mps;
+          if (sogM.value != null) {
+            const kn = sogM.value * KN;
+            document.getElementById("sog").textContent = kn.toFixed(2) + " kn";
+            document.getElementById("sog-sub").textContent = sogM.value.toFixed(3) + " m/s · " + fmtTime(sogM.updated_at);
+          } else {
+            document.getElementById("sog").textContent = "—";
+            document.getElementById("sog-sub").textContent = "";
+          }
+          const lat = t.latitude.value;
+          const lon = t.longitude.value;
+          const gpsTxt = fmtLatLon(lat, lon);
+          document.getElementById("gps").textContent = gpsTxt != null ? gpsTxt : "—";
+          document.getElementById("gps-sub").textContent = fmtTime(t.latitude.updated_at || t.longitude.updated_at);
+        } catch (e) {
+          document.getElementById("rpm").textContent = "—";
+          document.getElementById("rpm-sub").textContent = "Could not load /api/telemetry";
+        }
+      }
+      refresh();
+      setInterval(refresh, 1500);
+    </script>
+  </body>
+</html>
+"""
+
+LAB_PAGE_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cobalt Lab Transmit</title>
+    <style>
+      :root { font-family: "JetBrains Mono", "Fira Code", monospace; color-scheme: light; }
+      body { margin: 0; background: #0b1d2a; color: #d9edf7; }
+      header { padding: 12px 16px; background: #12324a; border-bottom: 1px solid #2b5d7e;
+              display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+      h1 { margin: 0; font-size: 16px; letter-spacing: 0.4px; }
+      nav.site-nav a { color: #7ec8e3; text-decoration: none; font-size: 13px; margin-left: 12px; }
+      nav.site-nav a:hover { text-decoration: underline; }
+      nav.site-nav span.here { color: #9fb8c8; font-size: 13px; margin-left: 12px; }
+      main { padding: 12px 16px; max-width: 720px; }
+      .panel { background: #0f283a; border: 1px solid #2b5d7e; border-radius: 6px; overflow: hidden; margin-top: 12px; }
+      .panel h2 { margin: 0; padding: 8px 10px; font-size: 13px; background: #173b55; }
+      pre { margin: 0; padding: 10px; min-height: 120px; font-size: 12px; white-space: pre-wrap; }
+      .controls { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-bottom: 1px solid #2b5d7e; }
+      .controls input, .controls button { background: #0b1d2a; color: #d9edf7; border: 1px solid #2b5d7e; padding: 4px 6px; border-radius: 4px; font-family: inherit; font-size: 12px; }
+      .warn { margin: 8px 10px; padding: 8px; font-size: 12px; background: #3a2218; border: 1px solid #8b5a30; border-radius: 4px; color: #f2d4c4; }
+      .lab-hint { margin: 4px 10px 8px; font-size: 11px; color: #9fb8c8; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Lab — Fusion CAN transmit (stubs)</h1>
+      <nav class="site-nav">
+        <a href="/">Dashboard</a>
+        <a href="/debug">Debug console</a>
+        <span class="here">Lab</span>
+      </nav>
+    </header>
+    <main>
+      <section class="panel">
+        <h2>PGN 126208 placeholders (vcan / verification only)</h2>
+        <p class="warn">Requires <code>COBALT_LAB_TRANSMIT_ENABLED=true</code>, <code>COBALT_READ_ONLY_MODE=false</code>, and <code>COBALT_WRITE_ENABLE=true</code>. Replace payload bytes from a real vessel capture before relying on these frames.</p>
+        <p class="lab-hint" id="labFusionHint"></p>
+        <div class="controls">
+          <input id="labFusionZone" placeholder="zone label" value="cockpit" style="min-width:120px">
+          <button type="button" id="labVolUp">Volume +</button>
+          <button type="button" id="labVolDown">Volume −</button>
+          <button type="button" id="labMuteOn">Mute</button>
+          <button type="button" id="labMuteOff">Unmute</button>
+        </div>
+        <pre id="labFusionResult"></pre>
+      </section>
+    </main>
+    <script>
+      async function fetchJson(url) {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(url + " status=" + response.status);
+        return response.json();
+      }
+      function labFusionHintText(status) {
+        if (!status.lab_transmit_enabled) {
+          return "Lab transmit: OFF (COBALT_LAB_TRANSMIT_ENABLED). API calls will be refused until enabled and restarted.";
+        }
+        const gates = [];
+        if (status.read_only_mode) gates.push("read_only_mode");
+        if (!status.write_enable) gates.push("write_enable");
+        if (status.emergency_disable) gates.push("emergency_disable");
+        if (gates.length) {
+          return "Lab flag on, but policy blocks transmit until: " + gates.join(", ") + " cleared.";
+        }
+        return "Lab transmit armed. Use vcan + candump to verify frames.";
+      }
+      async function refreshHint() {
+        try {
+          const status = await fetchJson("/status");
+          document.getElementById("labFusionHint").textContent = labFusionHintText(status);
+        } catch (_) {}
+      }
+      async function postLabFusion(path) {
+        const zone = (document.getElementById("labFusionZone").value || "cockpit").trim();
+        const response = await fetch(path + "?zone=" + encodeURIComponent(zone), { method: "POST" });
+        const body = await response.json();
+        document.getElementById("labFusionResult").textContent = JSON.stringify(body, null, 2);
+      }
+      document.getElementById("labVolUp").addEventListener("click", () => postLabFusion("/debug/lab/fusion/volume-up"));
+      document.getElementById("labVolDown").addEventListener("click", () => postLabFusion("/debug/lab/fusion/volume-down"));
+      document.getElementById("labMuteOn").addEventListener("click", () => postLabFusion("/debug/lab/fusion/mute-on"));
+      document.getElementById("labMuteOff").addEventListener("click", () => postLabFusion("/debug/lab/fusion/mute-off"));
+      refreshHint();
+      setInterval(refreshHint, 2000);
+    </script>
+  </body>
+</html>
+"""
 
 DEBUG_PAGE_HTML = """<!doctype html>
 <html lang="en">
@@ -329,8 +560,12 @@ DEBUG_PAGE_HTML = """<!doctype html>
     <style>
       :root { font-family: "JetBrains Mono", "Fira Code", monospace; color-scheme: light; }
       body { margin: 0; background: #0b1d2a; color: #d9edf7; }
-      header { padding: 12px 16px; background: #12324a; border-bottom: 1px solid #2b5d7e; }
+      header { padding: 12px 16px; background: #12324a; border-bottom: 1px solid #2b5d7e;
+              display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
       h1 { margin: 0; font-size: 16px; letter-spacing: 0.4px; }
+      nav.site-nav a { color: #7ec8e3; text-decoration: none; font-size: 13px; margin-left: 12px; }
+      nav.site-nav a:hover { text-decoration: underline; }
+      nav.site-nav span.here { color: #9fb8c8; font-size: 13px; margin-left: 12px; }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; }
       .panel { background: #0f283a; border: 1px solid #2b5d7e; border-radius: 6px; overflow: hidden; }
       .panel h2 { margin: 0; padding: 8px 10px; font-size: 13px; background: #173b55; }
@@ -347,7 +582,14 @@ DEBUG_PAGE_HTML = """<!doctype html>
     </style>
   </head>
   <body>
-    <header><h1>Cobalt Boat Debug Console (Read-Only)</h1></header>
+    <header>
+      <h1>Cobalt Boat Debug Console (Read-Only)</h1>
+      <nav class="site-nav">
+        <a href="/">Dashboard</a>
+        <a href="/debug/lab">Lab transmit</a>
+        <span class="here">Debug</span>
+      </nav>
+    </header>
     <main class="grid">
       <section class="panel"><h2>Health</h2><pre id="health" class="small"></pre></section>
       <section class="panel"><h2>Status</h2><pre id="status" class="small"></pre></section>

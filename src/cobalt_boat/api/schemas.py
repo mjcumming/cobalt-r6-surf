@@ -28,6 +28,25 @@ class StatusResponse(BaseModel):
     capture_session_id: str | None
 
 
+class TelemetryMetric(BaseModel):
+    """Single decoded metric with optional freshness timestamp (UTC ISO)."""
+
+    value: float | None = None
+    updated_at: str | None = None
+
+
+class TelemetrySnapshotResponse(BaseModel):
+    """Last-known navigation/engine values from observed NMEA 2000 traffic."""
+
+    engine_rpm: TelemetryMetric
+    engine_coolant_c: TelemetryMetric
+    speed_water_mps: TelemetryMetric
+    speed_over_ground_mps: TelemetryMetric
+    latitude: TelemetryMetric
+    longitude: TelemetryMetric
+    notes: str
+
+
 class LabFusionTransmitResponse(BaseModel):
     """Result of a gated lab Fusion CAN transmit."""
 

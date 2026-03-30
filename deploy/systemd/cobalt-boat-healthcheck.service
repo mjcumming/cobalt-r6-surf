@@ -6,6 +6,7 @@ After=cobalt-boat.service
 Type=oneshot
 User=root
 Group=root
+EnvironmentFile=-/etc/default/cobalt-boat
 ExecStart=/usr/local/bin/cobalt-boat-healthcheck --restart-service cobalt-boat.service
 NoNewPrivileges=true
 PrivateTmp=true

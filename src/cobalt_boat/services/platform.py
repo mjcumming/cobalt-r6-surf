@@ -25,6 +25,7 @@ from cobalt_boat.domains.garmin_switching import (
     default_switch_bank_template,
 )
 from cobalt_boat.domains.state import HealthStatus, SystemStatus, capture_session_id
+from cobalt_boat.domains.telemetry import BoatTelemetryStore
 from cobalt_boat.events import EventBus
 from cobalt_boat.safety.models import CommandRequest
 from cobalt_boat.safety.policy import PolicyEngine
@@ -59,6 +60,7 @@ class PlatformRuntime:
     decoder: CanDecoder
     can_listener: SocketCanListener
     can_transmitter: SocketCanTransmitter | None
+    telemetry: BoatTelemetryStore
 
 
 class PlatformService:
@@ -240,6 +242,11 @@ class PlatformService:
         return self._runtime.catalog_repository.list_recent(
             limit=limit, pgn=pgn, watch_only=watch_only
         )
+
+    def telemetry_snapshot(self) -> dict[str, object]:
+        """Last-known decoded engine/nav metrics (from CANboat `fields`)."""
+
+        return self._runtime.telemetry.as_dict()
 
     def recent_system_events(self, limit: int = 200) -> list[dict[str, object]]:
         """Query recent platform/system events."""

@@ -31,7 +31,7 @@ cobalt-boat-api
 
 Open debug console:
 
-- `http://127.0.0.1:8080/debug`
+- `http://127.0.0.1/debug`
 
 ## 3. Generate synthetic traffic
 

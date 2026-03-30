@@ -19,7 +19,7 @@ def make_settings(tmp_path: Path) -> Settings:
     log_path.write_text("line1\nline2\n", encoding="utf-8")
     return Settings(
         api_host="127.0.0.1",
-        api_port=8080,
+        api_port=80,
         sqlite_path=data_dir / "cobalt_boat.db",
         data_dir=data_dir,
         capture_dir=captures_dir,
@@ -70,6 +70,8 @@ def test_debug_endpoints(tmp_path: Path) -> None:
         root_response = client.get("/", follow_redirects=False)
         root_head_response = client.head("/", follow_redirects=False)
         debug_head_response = client.head("/debug")
+        lab_response = client.get("/debug/lab", follow_redirects=False)
+        telemetry_response = client.get("/api/telemetry")
 
     assert logs_response.status_code == 200
     lines = logs_response.json()["lines"]
@@ -86,11 +88,18 @@ def test_debug_endpoints(tmp_path: Path) -> None:
 
     assert page_response.status_code == 200
     assert "Cobalt Boat Debug Console" in page_response.text
-    assert root_response.status_code == 307
-    assert root_response.headers["location"] == "/debug"
-    assert root_head_response.status_code == 307
-    assert root_head_response.headers["location"] == "/debug"
+    assert root_response.status_code == 200
+    assert "Cobalt Boat" in root_response.text
+    assert "/debug" in root_response.text
+    assert root_head_response.status_code == 200
     assert debug_head_response.status_code == 200
+    assert lab_response.status_code == 200
+    assert "Lab — Fusion" in lab_response.text or "Fusion CAN transmit" in lab_response.text
+    assert telemetry_response.status_code == 200
+    telem = telemetry_response.json()
+    assert "engine_rpm" in telem
+    assert "notes" in telem
+    assert telem["engine_rpm"]["value"] is None
 
 
 def test_shadow_command_preview_denied_in_read_only_mode(tmp_path: Path) -> None:
@@ -323,7 +332,7 @@ def test_lab_fusion_transmit_sends_when_armed(mock_tx_class: MagicMock, tmp_path
     captures.mkdir(parents=True, exist_ok=True)
     settings = Settings(
         api_host="127.0.0.1",
-        api_port=8080,
+        api_port=80,
         sqlite_path=data_dir / "cobalt_boat.db",
         data_dir=data_dir,
         capture_dir=captures,

@@ -8,6 +8,7 @@ import pytest
 from cobalt_boat.can.capture import CaptureManager
 from cobalt_boat.can.models import CanEvent, RawCanFrame
 from cobalt_boat.config import Settings
+from cobalt_boat.domains.telemetry import BoatTelemetryStore
 from cobalt_boat.events import EventBus
 from cobalt_boat.safety.policy import PolicyEngine
 from cobalt_boat.services.platform import PlatformRuntime, PlatformService
@@ -82,6 +83,7 @@ def test_platform_start_fails_if_required_decoder_unavailable(tmp_path: Path) ->
         decoder=_DecoderUnavailable(),
         can_listener=_NoopListener(),
         can_transmitter=None,
+        telemetry=BoatTelemetryStore(),
     )
 
     service = PlatformService(runtime)
@@ -113,6 +115,7 @@ def test_decoder_runtime_error_degrades_health(tmp_path: Path) -> None:
         decoder=_DecoderFaulty(),
         can_listener=_NoopListener(),
         can_transmitter=None,
+        telemetry=BoatTelemetryStore(),
     )
     service = PlatformService(runtime)
     service.start()

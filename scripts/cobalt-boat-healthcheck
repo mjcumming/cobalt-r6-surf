@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="http://127.0.0.1:8080/health"
-STATUS_URL="http://127.0.0.1:8080/status"
+# Match the API from systemd env (/etc/default/cobalt-boat): standard port 80 (HTTP) or 443 (HTTPS).
+_CO_PORT="${COBALT_API_PORT:-80}"
+_CO_SCHEME="http"
+if [[ -n "${COBALT_API_SSL_KEYFILE:-}" && -n "${COBALT_API_SSL_CERTFILE:-}" ]]; then
+  if [[ -f "${COBALT_API_SSL_KEYFILE}" && -f "${COBALT_API_SSL_CERTFILE}" ]]; then
+    _CO_SCHEME="https"
+  fi
+fi
+URL="${_CO_SCHEME}://127.0.0.1:${_CO_PORT}/health"
+STATUS_URL="${_CO_SCHEME}://127.0.0.1:${_CO_PORT}/status"
 RESTART_SERVICE=""
 
 usage() {
@@ -42,6 +50,7 @@ done
 
 if ! python3 - "$URL" "$STATUS_URL" <<'PY'
 import json
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -52,7 +61,12 @@ status_url = sys.argv[2]
 
 def fetch(url: str) -> dict[str, object]:
     req = urllib.request.Request(url=url, method="GET")
-    with urllib.request.urlopen(req, timeout=2) as response:
+    context = None
+    if url.startswith("https:"):
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    with urllib.request.urlopen(req, timeout=2, context=context) as response:
         if response.status != 200:
             raise RuntimeError(f"http_status={response.status} url={url}")
         data = response.read().decode("utf-8")
