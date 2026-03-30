@@ -422,7 +422,7 @@ DEBUG_PAGE_HTML = """<!doctype html>
           if (document.activeElement !== document.getElementById("garminTemplate")) {
             document.getElementById("garminTemplate").value = JSON.stringify(garminTemplate, null, 2);
           }
-          document.getElementById("logs").textContent = (logs.lines || []).join("\\n");
+          document.getElementById("logs").textContent = (logs.lines || []).join(String.fromCharCode(10));
         } catch (err) {
           document.getElementById("health").textContent = "Refresh failed: " + String(err);
         }

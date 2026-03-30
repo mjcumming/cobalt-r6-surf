@@ -55,7 +55,8 @@ main() {
 
   check_binary
   # Input: candump format lines. Output: analyzer JSON.
-  exec "${CANDUMP2ANALYZER_BIN}" | "${ANALYZER_BIN}" -json
+  # Do not use `exec` with a pipeline (bash replaces only the left command; breaks the pipe).
+  "${CANDUMP2ANALYZER_BIN}" | "${ANALYZER_BIN}" -json
 }
 
 main "$@"
