@@ -49,6 +49,8 @@ export COBALT_CANBOAT_EXPECTED_VERSION=v6.1.6
 /usr/local/bin/cobalt-canboat-decoder --self-check
 ```
 
+The wrapper treats **`v6.1.6` and `6.1.6`** as compatible with analyzer output that reports `6.1.6`.
+
 ## Runtime environment
 
 Recommended service env:

@@ -80,6 +80,23 @@ Critical defaults:
 - `COBALT_READ_ONLY_MODE=true`
 - `COBALT_WRITE_ENABLE=false`
 
+### Logging, rotation, and SD card wear
+
+- **Level:** `COBALT_LOG_LEVEL` (for example `INFO` on the boat, `WARNING` when stable, `DEBUG` only dock-side).
+- **Text log file:** `COBALT_APP_LOG_PATH` (default under `/var/log/cobalt-boat/`).
+- **In-process rotation:** `COBALT_LOG_MAX_BYTES` and `COBALT_LOG_BACKUP_COUNT` use Python’s `RotatingFileHandler` so a debug spike cannot grow one file without bound before the next system rotate.
+- **System rotation:** `scripts/install_systemd_service.sh` installs `/etc/logrotate.d/cobalt-boat` (daily, compressed, `copytruncate`) for `/var/log/cobalt-boat/*.log`.
+
+`systemd` also appends stdout/stderr to the same log file, so you normally inspect it with `tail -F` or your editor; detailed systemd status still comes from `journalctl -u cobalt-boat.service`.
+
+**Larger write source than text logs:** every observed frame updates the **SQLite message catalog** (`COBALT_SQLITE_PATH`). A busy NMEA 2000 bus can generate far more SD traffic than application logging. Optional mitigations later: throttle or batch catalog updates, move `data/` to USB, or run long captures only dock-side. Raw JSONL capture sessions are **off** until you start one via the API.
+
+**ZRAM / swap:** Enabling zram swap on Raspberry Pi OS (see Raspberry Pi documentation or `raspi-config` / `systemd-zram-generator`) reduces swap traffic to the SD card when memory pressure appears. It does **not** replace managing log level, rotation, and database write patterns.
+
+### Dock-first operations
+
+Plan on **SSH or copying `data/` and logs at the dock** (Wi-Fi, Tailscale, or physical access). The service is designed to run headless without a laptop in sunlight at the helm.
+
 ## 7. Recovery
 
 If service fails to start:

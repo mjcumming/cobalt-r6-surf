@@ -377,4 +377,10 @@ Phase 4 complete when:
 
 Never skip steps.
 
+---
+
+## 16. Architecture decisions (ADRs)
+
+Implementation and operations choices (systemd, logging, offline validation, etc.) are recorded as **Architecture Decision Records** in [`docs/adr/README.md`](adr/README.md). Update or add an ADR when changing those conventions so dock-side and boat installs stay aligned.
+
 

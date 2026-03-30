@@ -1,12 +1,6 @@
+# Design specification
 
----
-
-# 📁 2. `docs/design-spec.md`
-
-```markdown
-# 🧱 Design Specification
-
-## 1. System Philosophy
+## 1. System philosophy
 
 This system is a **non-invasive marine automation platform**.
 
@@ -17,59 +11,97 @@ This system is a **non-invasive marine automation platform**.
 
 ---
 
-## 2. Architecture Layers
+## 2. Architecture layers
 
 ### Layer 1 — Physical
+
 - NMEA 2000 network
 - Raspberry Pi + CAN HAT
 
-### Layer 2 — CAN Interface
+### Layer 2 — CAN interface
+
 - SocketCAN (`can0`)
 - 250 kbps
 
-### Layer 3 — Data Decoding
-- CANboat
-- SignalK (optional)
+### Layer 3 — Data decoding
 
-### Layer 4 — Domain Layer
-- Python abstraction
-- Logical APIs (audio, lighting)
+- CANboat (authoritative payload decode)
+- Optional: SignalK and other consumers of the same bus
 
-### Layer 5 — Policy Layer
+### Layer 4 — Domain layer
+
+- Python models and services (PGN-oriented views, subsystems)
+
+### Layer 5 — Policy layer
+
 - Command validation
 - Safety enforcement
 - Audit logging
 
-### Layer 6 — API/UI
+### Layer 6 — API / UI
+
 - FastAPI
-- Local-only web interface
+- Local-only HTTP API and debug surfaces
 
 ---
 
-## 3. Core Patterns
+## 3. Core patterns
 
-### Event-Driven (Pub/Sub)
-- System reacts to state changes
+### Event-driven (pub/sub)
 
-### CQRS
-- Queries (read)
-- Commands (write)
+The platform reacts to decoded bus events and internal signals.
+
+### CQRS-style split
+
+- Reads: status, catalog, health
+- Writes: gated commands, profile updates, capture sessions (all policy-controlled)
 
 ---
 
-## 4. Command Model
+## 4. Command model
 
 Tiered approach:
 
 ### Tier 0
-- Read-only
+
+- Read-only observation
 
 ### Tier 1
-- Replay known safe commands
+
+- Replay known safe commands (when explicitly enabled)
 
 ### Tier 2
-- Parameterized commands (validated)
+
+- Parameterized commands (validated, audited)
 
 ---
 
-## 5. Data Flow
+## 5. Data flow
+
+Observed CAN frames flow:
+
+**SocketCAN** → `parse_nmea2000_id` → **`CanEvent`** → decoder (CANboat or basic) → **SQLite message catalog** / **event bus**.
+
+Optional **raw JSONL capture** is **off** until an operator starts a capture session via the API, to limit storage and SD wear.
+
+---
+
+## 6. Operations and deployment
+
+- Runtime is **headless** on Raspberry Pi OS; primary unit is **`cobalt-boat.service`** (see [`deployment.md`](deployment.md)).
+- **Logging:** `COBALT_LOG_LEVEL`, optional file path, in-process **size-based rotation** (`COBALT_LOG_MAX_BYTES`, `COBALT_LOG_BACKUP_COUNT`) plus **logrotate** for `/var/log/cobalt-boat/*.log`. The log directory is created for the **service user** via **systemd tmpfiles** so the app and `RotatingFileHandler` can write without running as root.
+- **CANboat** is checked at service start (`cobalt-canboat-decoder --self-check`); pinned version expectations are documented in [`canboat-setup.md`](canboat-setup.md).
+- **Dock-side** iteration (tests, captures, SSH) is the default; the boat carries **stable** installs.
+
+---
+
+## 7. Testing strategy (summary)
+
+- **pytest:** configuration, decoder adapter, **NMEA 2000 CAN ID** parsing (`tests/test_nmea2000_id.py`), **candump log lines** → frames/events (`tests/fixtures/`, `tests/test_candump_parser.py`).
+- **vcan / can-utils:** local bus simulation without the vessel ([`test-harness.md`](test-harness.md)).
+
+---
+
+## 8. Architecture decisions
+
+Normative decisions and rationale live in **[Architecture Decision Records](adr/README.md)** (`docs/adr/`).

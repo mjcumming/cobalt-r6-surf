@@ -41,9 +41,11 @@ install_files() {
   local service_rendered
   local env_rendered
   local tmpfiles_rendered
+  local logrotate_rendered
   service_rendered="$(mktemp)"
   env_rendered="$(mktemp)"
   tmpfiles_rendered="$(mktemp)"
+  logrotate_rendered="$(mktemp)"
 
   sed \
     -e "s#__COBALT_REPO_ROOT__#${REPO_ROOT}#g" \
@@ -58,13 +60,17 @@ install_files() {
     -e "s#__COBALT_USER__#${SERVICE_USER}#g" \
     -e "s#__COBALT_GROUP__#${SERVICE_GROUP}#g" \
     "${TMPFILES_SRC}" > "${tmpfiles_rendered}"
+  sed \
+    -e "s#__COBALT_USER__#${SERVICE_USER}#g" \
+    -e "s#__COBALT_GROUP__#${SERVICE_GROUP}#g" \
+    "${LOGROTATE_SRC}" > "${logrotate_rendered}"
 
   install -D -m 0644 "${service_rendered}" "${SYSTEMD_DIR}/${SERVICE_NAME}"
   install -D -m 0644 "${HEALTHCHECK_SERVICE_SRC}" "${SYSTEMD_DIR}/${HEALTHCHECK_SERVICE_NAME}"
   install -D -m 0644 "${HEALTHCHECK_TIMER_SRC}" "${SYSTEMD_DIR}/${HEALTHCHECK_TIMER_NAME}"
   install -D -m 0755 "${HEALTHCHECK_BIN_SRC}" "${HEALTHCHECK_BIN_PATH}"
   install -D -m 0644 "${tmpfiles_rendered}" "${TMPFILES_PATH}"
-  install -D -m 0644 "${LOGROTATE_SRC}" "${LOGROTATE_PATH}"
+  install -D -m 0644 "${logrotate_rendered}" "${LOGROTATE_PATH}"
 
   if [[ -f "${ENV_PATH}" ]]; then
     local backup_path
@@ -75,7 +81,7 @@ install_files() {
 
   install -D -m 0644 "${env_rendered}" "${ENV_PATH}"
 
-  rm -f "${service_rendered}" "${env_rendered}" "${tmpfiles_rendered}"
+  rm -f "${service_rendered}" "${env_rendered}" "${tmpfiles_rendered}" "${logrotate_rendered}"
 
   systemd-tmpfiles --create "${TMPFILES_PATH}"
 }

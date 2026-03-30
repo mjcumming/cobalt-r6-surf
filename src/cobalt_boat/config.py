@@ -41,6 +41,9 @@ class Settings:
     command_rate_limit_max_attempts: int = 5
 
     log_level: str = "INFO"
+    # Size-based file rotation (0 = single file; rely on logrotate only).
+    log_max_bytes: int = 5 * 1024 * 1024
+    log_backup_count: int = 7
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -101,6 +104,12 @@ class Settings:
                 )
             ),
             log_level=os.getenv("COBALT_LOG_LEVEL", cls.log_level),
+            log_max_bytes=int(
+                os.getenv("COBALT_LOG_MAX_BYTES", str(cls.log_max_bytes)),
+            ),
+            log_backup_count=int(
+                os.getenv("COBALT_LOG_BACKUP_COUNT", str(cls.log_backup_count)),
+            ),
         )
 
 

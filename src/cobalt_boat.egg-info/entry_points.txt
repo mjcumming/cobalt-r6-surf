@@ -1,2 +1,0 @@
-[console_scripts]
-cobalt-boat-api = cobalt_boat.api.app:run

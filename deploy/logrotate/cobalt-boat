@@ -6,5 +6,6 @@
     missingok
     notifempty
     copytruncate
-    create 0640 root adm
+    # Replaced at install time to match cobalt-boat.service User=/Group=.
+    create 0640 __COBALT_USER__ __COBALT_GROUP__
 }

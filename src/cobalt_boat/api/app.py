@@ -111,7 +111,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Create FastAPI app with lifecycle-managed platform services."""
 
     resolved_settings = settings or Settings.from_env()
-    configure_logging(resolved_settings.log_level, resolved_settings.app_log_path)
+    configure_logging(
+        resolved_settings.log_level,
+        resolved_settings.app_log_path,
+        log_max_bytes=resolved_settings.log_max_bytes,
+        log_backup_count=resolved_settings.log_backup_count,
+    )
     platform_service = create_runtime(resolved_settings)
 
     @asynccontextmanager

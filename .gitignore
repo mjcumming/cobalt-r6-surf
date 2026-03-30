@@ -10,3 +10,6 @@ venv/
 /data/*.db
 /data/*.db-*
 /data/captures/*.jsonl
+
+# setuptools editable metadata (local install)
+src/*.egg-info/

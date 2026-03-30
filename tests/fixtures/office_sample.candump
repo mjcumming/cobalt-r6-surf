@@ -1,0 +1,7 @@
+# Office / lab: paste real candump -ta lines here and run pytest.
+# PGN 127489 engine params — extended ID 19F20120, SA 0x20 (from existing tests).
+(1700000000.000000) vcan0 19F20120#0102030405060708
+# Same frame, default candump bracket style
+(1700000000.100000) vcan0 19F20120 [8] 01 02 03 04 05 06 07 08
+# PDU1-style ISO request: PF 0xEA, dest 0xFF, SA 0x15 → PGN 59904 (0xEA00)
+(1700000000.200000) vcan0 0CEAFF15#

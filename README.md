@@ -62,6 +62,12 @@ sudo systemctl start cobalt-boat.service
 
 Deployment details: [`docs/deployment.md`](docs/deployment.md)
 
+## Design docs and ADRs
+
+- Design summary: [`docs/design-spec.md`](docs/design-spec.md)
+- Long-form system guide: [`docs/system-design-guide.md`](docs/system-design-guide.md)
+- Architecture Decision Records: [`docs/adr/README.md`](docs/adr/README.md)
+
 ## Auditability
 
 - Installed software and libraries are tracked in [`docs/software-inventory.md`](docs/software-inventory.md)

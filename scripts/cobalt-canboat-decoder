@@ -37,9 +37,12 @@ self_check() {
   check_binary
   local version
   version="$(read_version)"
-  if [[ -n "${EXPECTED_VERSION}" ]] && [[ "${version}" != *"${EXPECTED_VERSION}"* ]]; then
-    echo "decoder wrapper error: expected version contains '${EXPECTED_VERSION}', got '${version}'" >&2
-    exit 1
+  if [[ -n "${EXPECTED_VERSION}" ]]; then
+    local stripped="${EXPECTED_VERSION#v}"
+    if [[ "${version}" != *"${EXPECTED_VERSION}"* ]] && [[ "${version}" != *"${stripped}"* ]]; then
+      echo "decoder wrapper error: expected version contains '${EXPECTED_VERSION}' or '${stripped}', got '${version}'" >&2
+      exit 1
+    fi
   fi
   echo "decoder wrapper ok: bin=${ANALYZER_BIN} version=${version}"
 }
