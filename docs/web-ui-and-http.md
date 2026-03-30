@@ -15,6 +15,11 @@ Quick reference for browsers and integrators after a normal [`deployment.md`](de
 
 Use **`https://`** and port **443** when TLS env vars are set (see below).
 
+## Troubleshooting
+
+- **“Wrong” port in the browser:** If an **IDE** shows something like `http://127.0.0.1:62528`, that is usually **port forwarding** to the Pi’s app—not the boat Wi‑Fi URL. On the boat network use **`http://<Pi-LAN-IP>/`** (default install, port **80**).
+- **Nothing on port 80:** Confirm `/etc/default/cobalt-boat` has **`COBALT_API_PORT=80`** and **`COBALT_API_HOST=0.0.0.0`**, the systemd unit includes **`CAP_NET_BIND_SERVICE`**, and you ran **`sudo systemctl restart cobalt-boat.service`** after changes. Re-run **`sudo ./scripts/install_systemd_service.sh`** if the unit predates those defaults.
+
 ## Environment variables (`/etc/default/cobalt-boat`)
 
 | Variable | Role |

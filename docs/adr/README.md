@@ -9,4 +9,4 @@ This folder records significant, stable decisions about how the Cobalt boat plat
 | [0003](0003-lab-fusion-can-transmit.md) | Gated lab CAN transmit (Fusion stub frames) |
 | [0004](0004-web-ui-standard-http-telemetry.md) | Web UI, standard HTTP/HTTPS ports, live telemetry |
 
-Related operational detail: [`../deployment.md`](../deployment.md), [`../design-spec.md`](../design-spec.md).
+Related operational detail: [`../deployment.md`](../deployment.md), [`../design-spec.md`](../design-spec.md), [`../dev-handoff-and-git.md`](../dev-handoff-and-git.md).

@@ -116,3 +116,7 @@ If healthcheck repeatedly fails:
 1. `journalctl -u cobalt-boat-healthcheck.service -n 200 --no-pager`
 2. Test manually: `/usr/local/bin/cobalt-boat-healthcheck`
 3. Verify API locally: `curl -s http://127.0.0.1/health`
+
+## See also
+
+- [`dev-handoff-and-git.md`](dev-handoff-and-git.md) — Git workflow, opening the correct repo folder in the IDE, and a checklist for pausing development.

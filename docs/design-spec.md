@@ -41,7 +41,9 @@ This system is a **non-invasive marine automation platform**.
 ### Layer 6 — API / UI
 
 - FastAPI
-- Local-only HTTP API and debug surfaces
+- **Operator dashboard** at `/`, **JSON telemetry** at `/api/telemetry`, **debug console** at `/debug`, **lab transmit** page at `/debug/lab`
+- Default deployment: **HTTP on port 80** on the boat LAN; optional **HTTPS** via TLS file paths and port **443** (see [`web-ui-and-http.md`](web-ui-and-http.md))
+- Local-only HTTP API, shadow command endpoints, and simulation/debug surfaces
 
 ---
 
@@ -53,7 +55,7 @@ The platform reacts to decoded bus events and internal signals.
 
 ### CQRS-style split
 
-- Reads: status, catalog, health
+- Reads: status, catalog, health, **telemetry snapshot** (last-known decoded engine/nav fields)
 - Writes: gated commands, profile updates, capture sessions (all policy-controlled)
 
 ---

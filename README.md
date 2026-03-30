@@ -75,6 +75,7 @@ Optional **`vcan` / lab** paths send placeholder PGN **126208** frames from the 
 - Design summary: [`docs/design-spec.md`](docs/design-spec.md)
 - Long-form system guide: [`docs/system-design-guide.md`](docs/system-design-guide.md)
 - Architecture Decision Records: [`docs/adr/README.md`](docs/adr/README.md)
+- Git, IDE layout, pausing work: [`docs/dev-handoff-and-git.md`](docs/dev-handoff-and-git.md)
 
 ## Auditability
 
