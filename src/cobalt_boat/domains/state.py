@@ -14,6 +14,7 @@ class SystemStatus:
     read_only_mode: bool
     write_enable: bool
     emergency_disable: bool
+    lab_transmit_enabled: bool
     can_interface: str
     capture_active: bool
     capture_session_id: str | None

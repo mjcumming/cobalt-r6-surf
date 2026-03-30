@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from fastapi.responses import RedirectResponse
 
@@ -18,6 +18,7 @@ from cobalt_boat.can.decoder import (
 from cobalt_boat.can.interface import SocketCanInterfaceManager
 from cobalt_boat.can.models import CanEvent
 from cobalt_boat.can.socketcan import SocketCanListener
+from cobalt_boat.can.transmit import SocketCanTransmitter
 from cobalt_boat.config import Settings
 from cobalt_boat.events import EventBus
 from cobalt_boat.logging_config import configure_logging
@@ -43,6 +44,7 @@ from .schemas import (
     GarminSwitchBankUpdateRequest,
     GarminSwitchBankResponse,
     HealthResponse,
+    LabFusionTransmitResponse,
     StatusResponse,
     WatchlistEntryResponse,
     WatchlistUpsertRequest,
@@ -82,6 +84,11 @@ def create_runtime(settings: Settings) -> PlatformService:
         event_sink=_can_event_sink,
         capture_manager=capture_manager,
     )
+    can_transmitter = (
+        SocketCanTransmitter(settings.can_interface)
+        if settings.lab_transmit_enabled
+        else None
+    )
     interface_manager = SocketCanInterfaceManager(
         interface=settings.can_interface,
         bitrate=settings.can_channel_bitrate,
@@ -101,6 +108,7 @@ def create_runtime(settings: Settings) -> PlatformService:
         interface_manager=interface_manager,
         decoder=create_decoder(settings),
         can_listener=can_listener,
+        can_transmitter=can_transmitter,
     )
     service = PlatformService(runtime)
     service_placeholder["service"] = service
@@ -146,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             read_only_mode=state.read_only_mode,
             write_enable=state.write_enable,
             emergency_disable=state.emergency_disable,
+            lab_transmit_enabled=state.lab_transmit_enabled,
             can_interface=state.can_interface,
             capture_active=state.capture_active,
             capture_session_id=state.capture_session_id,
@@ -183,6 +192,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_watchlist(pgn: int) -> list[WatchlistEntryResponse]:
         rows = platform_service.remove_watchlist(pgn=pgn)
         return [WatchlistEntryResponse(**row) for row in rows]
+
+    @app.post("/debug/lab/fusion/volume-up", response_model=LabFusionTransmitResponse)
+    def lab_fusion_volume_up(
+        zone: str = Query("cockpit", min_length=1, max_length=64),
+    ) -> LabFusionTransmitResponse:
+        payload = platform_service.lab_fusion_transmit(kind="volume_up", zone=zone)
+        return LabFusionTransmitResponse.model_validate(payload)
+
+    @app.post("/debug/lab/fusion/volume-down", response_model=LabFusionTransmitResponse)
+    def lab_fusion_volume_down(
+        zone: str = Query("cockpit", min_length=1, max_length=64),
+    ) -> LabFusionTransmitResponse:
+        payload = platform_service.lab_fusion_transmit(kind="volume_down", zone=zone)
+        return LabFusionTransmitResponse.model_validate(payload)
+
+    @app.post("/debug/lab/fusion/mute-on", response_model=LabFusionTransmitResponse)
+    def lab_fusion_mute_on(
+        zone: str = Query("cockpit", min_length=1, max_length=64),
+    ) -> LabFusionTransmitResponse:
+        payload = platform_service.lab_fusion_transmit(kind="mute_on", zone=zone)
+        return LabFusionTransmitResponse.model_validate(payload)
+
+    @app.post("/debug/lab/fusion/mute-off", response_model=LabFusionTransmitResponse)
+    def lab_fusion_mute_off(
+        zone: str = Query("cockpit", min_length=1, max_length=64),
+    ) -> LabFusionTransmitResponse:
+        payload = platform_service.lab_fusion_transmit(kind="mute_off", zone=zone)
+        return LabFusionTransmitResponse.model_validate(payload)
 
     @app.get(
         "/debug/captures/{session_id}/annotations",
@@ -304,6 +341,8 @@ DEBUG_PAGE_HTML = """<!doctype html>
       .controls { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-bottom: 1px solid #2b5d7e; }
       .controls input, .controls button { background: #0b1d2a; color: #d9edf7; border: 1px solid #2b5d7e; padding: 4px 6px; border-radius: 4px; font-family: inherit; font-size: 12px; }
       .controls label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+      .warn { margin: 8px 10px; padding: 8px; font-size: 12px; background: #3a2218; border: 1px solid #8b5a30; border-radius: 4px; color: #f2d4c4; }
+      .lab-hint { margin: 4px 10px 8px; font-size: 11px; color: #9fb8c8; }
       @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     </style>
   </head>
@@ -341,6 +380,19 @@ DEBUG_PAGE_HTML = """<!doctype html>
           <button id="saveGarminProfile">save template</button>
         </div>
         <textarea id="garminTemplate"></textarea>
+      </section>
+      <section class="panel full">
+        <h2>Lab Fusion transmit (PGN 126208 stubs)</h2>
+        <p class="warn">Placeholder payloads for bus verification on <strong>vcan</strong> only until you replace bytes from vessel capture. Requires <code>COBALT_LAB_TRANSMIT_ENABLED=true</code>, <code>COBALT_READ_ONLY_MODE=false</code>, and <code>COBALT_WRITE_ENABLE=true</code>.</p>
+        <p class="lab-hint" id="labFusionHint"></p>
+        <div class="controls">
+          <input id="labFusionZone" placeholder="zone label" value="cockpit" style="min-width:120px">
+          <button type="button" id="labVolUp">Volume +</button>
+          <button type="button" id="labVolDown">Volume −</button>
+          <button type="button" id="labMuteOn">Mute</button>
+          <button type="button" id="labMuteOff">Unmute</button>
+        </div>
+        <pre id="labFusionResult" class="small"></pre>
       </section>
       <section class="panel full"><h2>Application Log Tail</h2><pre id="logs"></pre></section>
     </main>
@@ -403,6 +455,25 @@ DEBUG_PAGE_HTML = """<!doctype html>
         }
         await refresh();
       }
+      function labFusionHintText(status) {
+        if (!status.lab_transmit_enabled) {
+          return "Lab transmit: OFF (COBALT_LAB_TRANSMIT_ENABLED). Buttons call the API but the service will refuse until enabled and restarted.";
+        }
+        const gates = [];
+        if (status.read_only_mode) gates.push("read_only_mode");
+        if (!status.write_enable) gates.push("write_enable");
+        if (status.emergency_disable) gates.push("emergency_disable");
+        if (gates.length) {
+          return "Lab flag on, but policy blocks transmit until: " + gates.join(", ") + " cleared.";
+        }
+        return "Lab transmit armed (policy may still rate-limit). Use vcan + candump to verify frames.";
+      }
+      async function postLabFusion(path) {
+        const zone = (document.getElementById("labFusionZone").value || "cockpit").trim();
+        const response = await fetch(path + "?zone=" + encodeURIComponent(zone), { method: "POST" });
+        const body = await response.json();
+        document.getElementById("labFusionResult").textContent = JSON.stringify(body, null, 2);
+      }
       async function refresh() {
         try {
           const [health, status, events, catalog, logs, watchlist, garminTemplate] = await Promise.all([
@@ -419,6 +490,7 @@ DEBUG_PAGE_HTML = """<!doctype html>
           render("events", events);
           render("catalog", catalog);
           render("watchlist", watchlist);
+          document.getElementById("labFusionHint").textContent = labFusionHintText(status);
           if (document.activeElement !== document.getElementById("garminTemplate")) {
             document.getElementById("garminTemplate").value = JSON.stringify(garminTemplate, null, 2);
           }
@@ -431,6 +503,10 @@ DEBUG_PAGE_HTML = """<!doctype html>
       document.getElementById("saveWatch").addEventListener("click", saveWatchlistEntry);
       document.getElementById("removeWatch").addEventListener("click", removeWatchlistEntry);
       document.getElementById("saveGarminProfile").addEventListener("click", saveGarminSwitchProfile);
+      document.getElementById("labVolUp").addEventListener("click", () => postLabFusion("/debug/lab/fusion/volume-up"));
+      document.getElementById("labVolDown").addEventListener("click", () => postLabFusion("/debug/lab/fusion/volume-down"));
+      document.getElementById("labMuteOn").addEventListener("click", () => postLabFusion("/debug/lab/fusion/mute-on"));
+      document.getElementById("labMuteOff").addEventListener("click", () => postLabFusion("/debug/lab/fusion/mute-off"));
       refresh();
       setInterval(refresh, 2000);
     </script>

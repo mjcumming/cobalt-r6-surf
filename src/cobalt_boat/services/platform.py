@@ -15,8 +15,10 @@ from cobalt_boat.can.interface import SocketCanInterfaceManager
 from cobalt_boat.can.models import CanEvent
 from cobalt_boat.can.nmea2000 import parse_nmea2000_id
 from cobalt_boat.can.socketcan import SocketCanListener
+from cobalt_boat.can.transmit import SocketCanTransmitter
 from cobalt_boat.config import Settings
 from cobalt_boat.domains.commands import CommandPreviewResult
+from cobalt_boat.domains.fusion_lab import FusionLabKind, fusion_lab_command_frame
 from cobalt_boat.domains.garmin_switching import (
     build_default_switch_bank_profile,
     build_switch_bank_profile_from_template,
@@ -56,6 +58,7 @@ class PlatformRuntime:
     interface_manager: SocketCanInterfaceManager
     decoder: CanDecoder
     can_listener: SocketCanListener
+    can_transmitter: SocketCanTransmitter | None
 
 
 class PlatformService:
@@ -89,6 +92,8 @@ class PlatformService:
     def stop(self) -> None:
         self._runtime.can_listener.stop()
         self._runtime.decoder.close()
+        if self._runtime.can_transmitter is not None:
+            self._runtime.can_transmitter.close()
         stopped = self.stop_capture()
         self._runtime.system_event_repository.log_event(
             "platform_stopped",
@@ -139,6 +144,7 @@ class PlatformService:
             read_only_mode=settings.read_only_mode,
             write_enable=settings.write_enable,
             emergency_disable=settings.emergency_disable,
+            lab_transmit_enabled=settings.lab_transmit_enabled,
             can_interface=settings.can_interface,
             capture_active=session is not None,
             capture_session_id=capture_session_id(session),
@@ -438,6 +444,82 @@ class PlatformService:
             approved=decision.approved,
             reason=decision.reason,
         )
+
+    def lab_fusion_transmit(
+        self,
+        *,
+        kind: FusionLabKind,
+        zone: str,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Send a gated Fusion lab stub frame (PGN 126208 placeholder payload)."""
+
+        settings = self._runtime.settings
+        if not settings.lab_transmit_enabled:
+            return {
+                "ok": False,
+                "reason": "lab_transmit_disabled",
+                "hint": "set COBALT_LAB_TRANSMIT_ENABLED=true (still requires policy gates)",
+            }
+        if self._runtime.can_transmitter is None:
+            return {"ok": False, "reason": "can_transmitter_not_configured"}
+
+        if kind in ("volume_up", "volume_down"):
+            parameters: dict[str, Any] = {
+                "zone": zone.strip(),
+                "direction": "up" if kind == "volume_up" else "down",
+            }
+            command_name = "lab_volume_step"
+        else:
+            parameters = {"zone": zone.strip(), "muted": kind == "mute_on"}
+            command_name = "lab_mute"
+
+        request = CommandRequest(
+            domain="audio",
+            command_name=command_name,
+            parameters=parameters,
+            timestamp=datetime.now(tz=timezone.utc),
+            correlation_id=correlation_id,
+        )
+        decision = self._runtime.policy_engine.evaluate(request)
+        if not decision.approved:
+            return {"ok": False, "reason": decision.reason}
+
+        can_id, data = fusion_lab_command_frame(settings, kind)
+        try:
+            self._runtime.can_transmitter.send_extended(can_id, data)
+        except Exception as exc:
+            LOGGER.exception("lab_fusion_transmit_failed kind=%s", kind)
+            self._runtime.system_event_repository.log_event(
+                "lab_fusion_transmit_failed",
+                {"kind": kind, "zone": zone, "error": str(exc)},
+            )
+            return {"ok": False, "reason": f"transmit_failed:{exc}"}
+
+        self._runtime.system_event_repository.log_event(
+            "lab_fusion_transmitted",
+            {
+                "kind": kind,
+                "zone": zone,
+                "can_id": can_id,
+                "data_hex": data.hex(),
+                "correlation_id": correlation_id,
+            },
+        )
+        LOGGER.info(
+            "lab_fusion_transmitted kind=%s zone=%s can_id=0x%X data_hex=%s",
+            kind,
+            zone,
+            can_id,
+            data.hex(),
+        )
+        return {
+            "ok": True,
+            "kind": kind,
+            "zone": zone,
+            "can_id": f"0x{can_id:08X}",
+            "data_hex": data.hex(),
+        }
 
     def tail_logs(self, lines: int = 200) -> list[str]:
         """Read last N lines from application log file."""

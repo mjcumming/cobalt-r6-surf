@@ -22,9 +22,24 @@ class StatusResponse(BaseModel):
     read_only_mode: bool
     write_enable: bool
     emergency_disable: bool
+    lab_transmit_enabled: bool
     can_interface: str
     capture_active: bool
     capture_session_id: str | None
+
+
+class LabFusionTransmitResponse(BaseModel):
+    """Result of a gated lab Fusion CAN transmit."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool
+    kind: str | None = None
+    zone: str | None = None
+    can_id: str | None = None
+    data_hex: str | None = None
+    reason: str | None = None
+    hint: str | None = None
 
 
 class AudioSetVolumeCommand(BaseModel):

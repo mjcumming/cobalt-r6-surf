@@ -92,6 +92,7 @@ Optional **raw JSONL capture** is **off** until an operator starts a capture ses
 - **Logging:** `COBALT_LOG_LEVEL`, optional file path, in-process **size-based rotation** (`COBALT_LOG_MAX_BYTES`, `COBALT_LOG_BACKUP_COUNT`) plus **logrotate** for `/var/log/cobalt-boat/*.log`. The log directory is created for the **service user** via **systemd tmpfiles** so the app and `RotatingFileHandler` can write without running as root.
 - **CANboat** is checked at service start (`cobalt-canboat-decoder --self-check`); pinned version expectations are documented in [`canboat-setup.md`](canboat-setup.md).
 - **Dock-side** iteration (tests, captures, SSH) is the default; the boat carries **stable** installs.
+- **Lab CAN transmit** (Fusion PGN 126208 **placeholder** payloads) is opt-in via env flags for **`vcan`** verification only; see ADR 0003.
 
 ---
 

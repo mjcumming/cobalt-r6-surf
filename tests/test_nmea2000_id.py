@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cobalt_boat.can.nmea2000 import parse_nmea2000_id
+from cobalt_boat.can.nmea2000 import build_nmea2000_can_id, parse_nmea2000_id
 
 
 @pytest.mark.parametrize(
@@ -35,3 +35,27 @@ def test_parse_nmea2000_id_known_frames(
 
 def test_parse_nmea2000_id_rejects_standard_11_bit() -> None:
     assert parse_nmea2000_id(0x123, is_extended_id=False) is None
+
+
+@pytest.mark.parametrize(
+    ("can_id", "priority", "pgn", "source", "destination"),
+    [
+        (0x19F20120, 6, 127489, 0x20, None),
+        (0x0CEAFF15, 3, 59904, 0x15, 0xFF),
+        (0x19F20D40, 6, 127501, 0x40, None),
+    ],
+)
+def test_build_nmea2000_id_round_trip(
+    can_id: int,
+    priority: int,
+    pgn: int,
+    source: int,
+    destination: int | None,
+) -> None:
+    rebuilt = build_nmea2000_can_id(
+        priority=priority,
+        pgn=pgn,
+        source_address=source,
+        destination_address=destination,
+    )
+    assert rebuilt == can_id

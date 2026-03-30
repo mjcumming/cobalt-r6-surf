@@ -170,3 +170,16 @@ Only `High` mappings should be candidates for future controlled replay evaluatio
 - `MS-RA600` is NMEA 2000-centric and lacks Ethernet-class media features.
 - Expect control + metadata support, but not high-bandwidth UI features (for example album art).
 - Firmware behavior can vary by stereo and MFD versions; all mappings require validation on target boat.
+
+## 13. Lab transmit stubs (Cobalt platform)
+
+The API exposes **debug-only** `POST /debug/lab/fusion/*` routes that send **single-frame PGN 126208** messages with **distinct placeholder payloads** (volume up/down, mute on/off). These exist to prove **SocketCAN transmit**, policy gating, and auditing on **`vcan`** — **not** as a correct Fusion-Link encoding.
+
+To arm transmit (requires **service restart** after env change):
+
+- `COBALT_LAB_TRANSMIT_ENABLED=true`
+- `COBALT_READ_ONLY_MODE=false`
+- `COBALT_WRITE_ENABLE=true`
+- Optional: `COBALT_LAB_TRANSMIT_SOURCE_ADDRESS`, `COBALT_LAB_FUSION_DEST_ADDRESS` (defaults: `0x90` → `255` global PDU1 destination)
+
+Replace the placeholder bytes in `src/cobalt_boat/domains/fusion_lab.py` with **capture-derived** data once field confidence is high (see §10).

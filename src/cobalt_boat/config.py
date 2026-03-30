@@ -45,6 +45,13 @@ class Settings:
     log_max_bytes: int = 5 * 1024 * 1024
     log_backup_count: int = 7
 
+    # Lab CAN transmit (Fusion stub buttons). Off by default; also requires
+    # read_only_mode=false, write_enable=true, emergency_disable=false, policy approval.
+    lab_transmit_enabled: bool = False
+    lab_transmit_priority: int = 6
+    lab_transmit_source_address: int = 0x90
+    lab_fusion_destination_address: int = 255
+
     @classmethod
     def from_env(cls) -> Settings:
         """Build settings from environment variables."""
@@ -109,6 +116,27 @@ class Settings:
             ),
             log_backup_count=int(
                 os.getenv("COBALT_LOG_BACKUP_COUNT", str(cls.log_backup_count)),
+            ),
+            lab_transmit_enabled=_parse_bool(
+                os.getenv("COBALT_LAB_TRANSMIT_ENABLED"),
+                default=cls.lab_transmit_enabled,
+            ),
+            lab_transmit_priority=int(
+                os.getenv("COBALT_LAB_TRANSMIT_PRIORITY", str(cls.lab_transmit_priority)),
+            ),
+            lab_transmit_source_address=int(
+                os.getenv(
+                    "COBALT_LAB_TRANSMIT_SOURCE_ADDRESS",
+                    str(cls.lab_transmit_source_address),
+                ),
+                0,
+            ),
+            lab_fusion_destination_address=int(
+                os.getenv(
+                    "COBALT_LAB_FUSION_DEST_ADDRESS",
+                    str(cls.lab_fusion_destination_address),
+                ),
+                0,
             ),
         )
 

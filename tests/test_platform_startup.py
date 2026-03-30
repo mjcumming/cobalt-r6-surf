@@ -81,6 +81,7 @@ def test_platform_start_fails_if_required_decoder_unavailable(tmp_path: Path) ->
         interface_manager=_NoopInterfaceManager(),
         decoder=_DecoderUnavailable(),
         can_listener=_NoopListener(),
+        can_transmitter=None,
     )
 
     service = PlatformService(runtime)
@@ -111,6 +112,7 @@ def test_decoder_runtime_error_degrades_health(tmp_path: Path) -> None:
         interface_manager=_NoopInterfaceManager(),
         decoder=_DecoderFaulty(),
         can_listener=_NoopListener(),
+        can_transmitter=None,
     )
     service = PlatformService(runtime)
     service.start()

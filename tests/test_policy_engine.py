@@ -65,3 +65,27 @@ def test_policy_approves_allowed_command(tmp_path: Path) -> None:
 
     assert decision.approved is True
     assert decision.reason == "approved"
+
+
+def test_policy_approves_lab_fusion_volume_step(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path, read_only=False, write_enable=True)
+    request = CommandRequest(
+        domain="audio",
+        command_name="lab_volume_step",
+        parameters={"zone": "cockpit", "direction": "up"},
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+    decision = engine.evaluate(request)
+    assert decision.approved is True
+
+
+def test_policy_approves_lab_fusion_mute(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path, read_only=False, write_enable=True)
+    request = CommandRequest(
+        domain="audio",
+        command_name="lab_mute",
+        parameters={"zone": "cockpit", "muted": True},
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+    decision = engine.evaluate(request)
+    assert decision.approved is True

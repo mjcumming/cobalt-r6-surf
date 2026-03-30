@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 from cobalt_boat.config import Settings
 from cobalt_boat.safety.models import ALLOWED_DOMAINS, DENIED_DOMAINS, CommandRequest, PolicyDecision
@@ -24,6 +23,12 @@ class WhitelistEntry:
 DEFAULT_WHITELIST: tuple[WhitelistEntry, ...] = (
     WhitelistEntry(domain="audio", command_name="set_volume", required_params=("zone", "level")),
     WhitelistEntry(domain="audio", command_name="set_source", required_params=("source",)),
+    WhitelistEntry(
+        domain="audio",
+        command_name="lab_volume_step",
+        required_params=("zone", "direction"),
+    ),
+    WhitelistEntry(domain="audio", command_name="lab_mute", required_params=("zone", "muted")),
     WhitelistEntry(domain="lighting", command_name="set_color", required_params=("zone", "rgb")),
     WhitelistEntry(domain="lighting", command_name="set_brightness", required_params=("zone", "level")),
 )

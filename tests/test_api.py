@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -54,6 +55,7 @@ def test_status_endpoint_defaults_to_read_only(tmp_path: Path) -> None:
     assert payload["read_only_mode"] is True
     assert payload["write_enable"] is False
     assert payload["emergency_disable"] is False
+    assert payload["lab_transmit_enabled"] is False
     assert payload["can_interface"] == "can0"
 
 
@@ -297,3 +299,49 @@ def test_capture_annotations_and_fusion_correlation(tmp_path: Path) -> None:
     assert payload["matches"] == 1
     assert payload["confidence"] == "low"
     assert payload["results"][0]["chain_matched"] is True
+
+
+def test_lab_fusion_transmit_refused_when_disabled(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as client:
+        response = client.post("/debug/lab/fusion/volume-up?zone=cockpit")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["reason"] == "lab_transmit_disabled"
+
+
+@patch("cobalt_boat.api.app.SocketCanTransmitter")
+def test_lab_fusion_transmit_sends_when_armed(mock_tx_class: MagicMock, tmp_path: Path) -> None:
+    mock_instance = MagicMock()
+    mock_tx_class.return_value = mock_instance
+    log_path = tmp_path / "cobalt-boat.log"
+    log_path.write_text("", encoding="utf-8")
+    data_dir = tmp_path / "data"
+    captures = data_dir / "captures"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    captures.mkdir(parents=True, exist_ok=True)
+    settings = Settings(
+        api_host="127.0.0.1",
+        api_port=8080,
+        sqlite_path=data_dir / "cobalt_boat.db",
+        data_dir=data_dir,
+        capture_dir=captures,
+        app_log_path=log_path,
+        can_interface="can0",
+        decoder_backend="basic",
+        allow_basic_decoder_insecure=True,
+        decoder_required=False,
+        read_only_mode=False,
+        write_enable=True,
+        lab_transmit_enabled=True,
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        response = client.post("/debug/lab/fusion/volume-down?zone=bow")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "volume_down"
+    assert body["zone"] == "bow"
+    mock_instance.send_extended.assert_called_once()

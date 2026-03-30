@@ -62,6 +62,10 @@ sudo systemctl start cobalt-boat.service
 
 Deployment details: [`docs/deployment.md`](docs/deployment.md)
 
+### Lab CAN transmit (Fusion stubs, off by default)
+
+Optional **`vcan` / lab** paths send placeholder PGN **126208** frames from the debug UI (`Volume ±`, `Mute` / `Unmute`) when **`COBALT_LAB_TRANSMIT_ENABLED=true`**, **`COBALT_READ_ONLY_MODE=false`**, and **`COBALT_WRITE_ENABLE=true`**. See [`docs/fusion-ms-ra600-nmea-guide.md`](docs/fusion-ms-ra600-nmea-guide.md) §13 and [`docs/adr/0003-lab-fusion-can-transmit.md`](docs/adr/0003-lab-fusion-can-transmit.md).
+
 ## Design docs and ADRs
 
 - Design summary: [`docs/design-spec.md`](docs/design-spec.md)
